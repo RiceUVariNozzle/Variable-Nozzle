@@ -1,0 +1,126 @@
+//Libraries accessed
+#include <FlexyStepper.h>
+
+//Creates Pin Location for Pulse, Direction, Enable, and LED Pin Connections
+const int PULSE_PIN = 13;
+const int DIR_PIN = 12;
+const int ENABLE_PIN = 11;
+const int LED_PIN = 3;
+
+//Variables for sizing, degress, and steps
+const float stepRate = 4;
+const float stdDegPerStep = 1.8;
+const float degreeHoming = 30;
+
+//Gear Information
+const float inletGearTeeth = 36;
+const float outletGearTeeth = 20;
+
+//Constants for running through desired orifice sizes
+float desiredSteps;
+float currentSize = 5;
+float desiredSize;
+bool initialHoming = false;
+char resultPost[3];
+//int arraySize = 9;
+//float orificeSizes[9] = {0.5, 3.7, 2.2, 1.2, 4.8, 2.9, 3.4, 0.6, 3.5};
+//char testPrompt[5];
+
+//Function to convert orifice size desired to value of steps
+float stepsFromSizing(float sizeChosen, float sizeCurrent ,float driverStep, float degStandard, float inletGear, float outletGear){
+  //Initialized Values
+  float desiredDeg;
+  float desiredSteps;
+  float sizeDiff;
+  
+  //Determines size difference of chosen orifice sizes
+  sizeDiff = abs(sizeChosen - sizeCurrent);
+
+  //Calculations
+  desiredDeg = (sizeDiff * (270/4.5));
+  desiredSteps = round(desiredDeg*(driverStep/stdDegPerStep)*(outletGear/inletGear));
+
+  //Conidtion to determine step direction
+  if(sizeChosen < sizeCurrent){
+    desiredSteps = -1*desiredSteps;
+  }
+
+  //Return result
+  return desiredSteps;
+}
+
+
+FlexyStepper stepperSolo; //Creates Stepper Entity
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+
+  pinMode(LED_PIN, OUTPUT); //LED Pin set
+  pinMode(ENABLE_PIN, OUTPUT); //Allows Enable Pin to run
+  stepperSolo.connectToPins(PULSE_PIN,DIR_PIN); //Sets pin connections from driver to Driver
+  digitalWrite(ENABLE_PIN,LOW);//Ensures motor will run
+
+  //Motor movements set
+  stepperSolo.setSpeedInStepsPerSecond(100);
+  stepperSolo.setAccelerationInStepsPerSecondPerSecond(100);
+  stepperSolo.setStepsPerRevolution(800);
+
+  //Homing conditions
+  const float homingSpeedInSteps = 100;
+  const float maxDistanceToMoveInSteps = degreeHoming/(stdDegPerStep/stepRate);
+  const int directionTowardsHome = -1;
+
+//Checks to see if homing runs once correctly
+if (initialHoming != true){
+  while(stepperSolo.moveToHomeInSteps(directionTowardsHome,homingSpeedInSteps,maxDistanceToMoveInSteps, A1) != true){
+    //Will run until reaches home
+    Serial.println("Not Found");
+  }
+  initialHoming = true;
+  Serial.println("Initial Homing Set");
+  delay(3000);
+  }
+  
+//Successful condtion met
+else{
+    Serial.println("Found");
+  }
+}
+
+void loop() {
+//Presents user input in dialogue box
+Serial.println("Input Desired Orifice Sizing (Any value between 0.5mm and 5.0mm):");
+
+//Prevents code from returning to 0 value once it is run (Prevent unnecessary homing from occuring)
+if(Serial.read() != 0){
+
+//Prevents code from running request without input
+  while(Serial.available()==0){
+  }
+
+
+//Sets 'desiredSize' float value from user interface; Prints out user input
+  desiredSize = Serial.parseFloat();
+    
+  if((desiredSize >= 0.5)&&(desiredSize <= 5.0)){
+    Serial.println(desiredSize);
+
+//Code run to determine amount of steps run to match desired size   
+    desiredSteps = stepsFromSizing(desiredSize,currentSize,stepRate,stdDegPerStep,inletGearTeeth,outletGearTeeth);
+  
+    dtostrf(desiredSteps,-4,0,resultPost);
+    Serial.println("Amount of steps taken:");
+    Serial.println(resultPost);
+
+//Defines new current orifice size
+    currentSize = desiredSize;
+    stepperSolo.moveRelativeInSteps(-1*desiredSteps);
+    delay(5000);
+  } 
+  else{
+    Serial.println("***Incorrect Value Selected****");
+  }
+}
+ 
+}
